@@ -93,6 +93,10 @@ def generate_efficiently(model, tokenizer, prompt, max_new_tokens=100, temp=0.8,
     model.eval()
     input_ids = tokenizer.encode(prompt, return_tensors="pt").to(device)
     
+    # Get max context length from positional encoding buffer
+    max_context_len = model.decoder.pos_encoder.pe.size(1)
+    current_len = input_ids.size(1)
+    
     # Start timing
     start_time = time.time()
     
@@ -108,12 +112,17 @@ def generate_efficiently(model, tokenizer, prompt, max_new_tokens=100, temp=0.8,
     next_token = torch.multinomial(probs, num_samples=1)  # Sampling
     
     output_ids = [next_token.item()]
+    current_len += 1
     
     # =========================================================================
     # PHASE 2: INCREMENTAL DECODING (Fast token-by-token generation)
     # =========================================================================
     # Only pass the NEW token; attention is computed over cached history
     for _ in range(max_new_tokens - 1):
+        # Stop if we've reached maximum context length
+        if current_len >= max_context_len:
+            break
+            
         # Forward pass with only the new token + cached K,V
         logits, past_key_values = model(next_token, layer_caches=past_key_values)
         
@@ -124,6 +133,7 @@ def generate_efficiently(model, tokenizer, prompt, max_new_tokens=100, temp=0.8,
         
         token_id = next_token.item()
         output_ids.append(token_id)
+        current_len += 1
         
         # Stop on EOS token
         if token_id == tokenizer.eos_token_id:

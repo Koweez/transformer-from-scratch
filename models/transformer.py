@@ -162,7 +162,7 @@ class GPTTransformer(nn.Module):
         # Output projection (language modeling head)
         self.output_layer = nn.Linear(d_model, vocab_size)
         
-    def forward(self, tgt, layer_caches=None):
+    def forward(self, tgt, layer_caches=None, use_cache=True):
         """
         Forward pass with optional KV-cache.
         
@@ -175,11 +175,15 @@ class GPTTransformer(nn.Module):
             output (Tensor): Logits of shape (batch, seq_len, vocab_size)
             presents (list): Updated KV-cache for next generation step
         """
+        if not use_cache:
+            decoder_out, _ = self.decoder(tgt, layer_caches=None)
+            return self.output_layer(decoder_out), None
+        
         decoder_out, presents = self.decoder(tgt, layer_caches=layer_caches)
         output = self.output_layer(decoder_out)
         return output, presents
     
-    def generate(self, src, max_len, start_symbol):
+    def generate(self, src, max_len, start_symbol=None, use_cache=True):
         """
         Autoregressive generation with KV-cache.
         
@@ -188,27 +192,40 @@ class GPTTransformer(nn.Module):
         evaluate.py for temperature-based sampling.
         
         Args:
-            src (Tensor): Context tokens (unused, for API compatibility)
-            max_len (int): Maximum generation length
-            start_symbol (int): Start token ID
+            src (Tensor): Input/prompt tokens of shape (batch, seq_len)
+            max_len (int): Number of NEW tokens to generate
+            start_symbol (int, optional): Deprecated, ignored. Kept for backward compatibility.
+            use_cache (bool): Whether to use KV-cache for efficient generation. Default: True
         
         Returns:
-            Tensor: Generated token IDs of shape (batch, max_len + 1)
+            Tensor: Full sequence (prompt + generated) of shape (batch, src_len + max_len)
         """
-        batch_size = src.size(0)
+        # Get max context length from positional encoding buffer
+        max_context_len = self.decoder.pos_encoder.pe.size(1)
         
-        # Initialize with start token
-        ys = torch.ones(batch_size, 1).fill_(start_symbol).type_as(src.data)
-        past_key_values = None
+        ys = src
+        
+        # Check if prompt already exceeds max length
+        if ys.size(1) >= max_context_len:
+            return ys
         
         # First forward pass (prefill)
-        logits, past_key_values = self.forward(ys, layer_caches=past_key_values)
+        logits, past_key_values = self.forward(ys, layer_caches=None, use_cache=use_cache)
         next_token = torch.argmax(logits[:, -1], dim=-1, keepdim=True)
         ys = torch.cat([ys, next_token], dim=1)
         
-        # Incremental generation with KV-cache
+        # Incremental generation
         for _ in range(max_len - 1):
-            logits, past_key_values = self.forward(ys, layer_caches=past_key_values)
+            # Stop if next token would exceed maximum context length
+            if ys.size(1) >= max_context_len:
+                break
+                
+            if use_cache:
+                # With KV-cache: only process the new token, attend to cached history
+                logits, past_key_values = self.forward(tgt=next_token, layer_caches=past_key_values, use_cache=True)
+            else:
+                # Without cache: recompute attention over the FULL sequence each time (O(n²))
+                logits, _ = self.forward(tgt=ys, layer_caches=None, use_cache=False)
             next_token = torch.argmax(logits[:, -1], dim=-1, keepdim=True)
             ys = torch.cat([ys, next_token], dim=1)
         
