@@ -1,0 +1,33 @@
+# =============================================================================
+# Git Ignore File
+# =============================================================================
+
+# Environment variables (contains local paths - DO NOT COMMIT)
+.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Model checkpoints (large files - download or train separately)
+checkpoints/
+*.pth
+*.pt
+
+# Data files (will be downloaded automatically)
+data/
+
+# TensorBoard logs (generated during training)
+runs/
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+
+result.txt
