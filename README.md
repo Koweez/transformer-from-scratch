@@ -8,7 +8,7 @@ A complete GPT-style transformer implementation with KV-cache optimization, buil
 - **KV-Cache for efficient inference** - O(N) per token instead of O(N²)
 - **Encoder-Decoder Transformer** for sequence-to-sequence tasks
 - **TensorBoard logging** and checkpoint management
-- Trained on Tiny Shakespeare dataset
+- Trained on **Tiny Shakespeare dataset**
 
 ## Project Structure
 
