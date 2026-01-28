@@ -46,14 +46,12 @@ class DecoderLayer(nn.Module):
                                                        num_heads=num_heads, dropout=dropout)
         
         # Layer normalization for each sub-layer
-        self.layer_norm1 = RMSNorm(d_model=d_model)
-        self.layer_norm2 = RMSNorm(d_model=d_model)
-        self.layer_norm3 = RMSNorm(d_model=d_model)
+        self.layer_norm1 = LayerNorm(d_model=d_model)
+        self.layer_norm2 = LayerNorm(d_model=d_model)
+        self.layer_norm3 = LayerNorm(d_model=d_model)
         
         # Feed-forward network
-        self.ff1 = FeedForward(d_model=d_model, d_ff=d_ff, dropout=dropout)
-        self.ff2 = FeedForward(d_model=d_model, d_ff=d_ff, dropout=dropout)
-        self.relu = nn.ReLU()
+        self.ff = FeedForward(d_model=d_model, d_ff=d_ff, dropout=dropout)
     
     def forward(self, x, encoder_out, mask):
         """
@@ -81,9 +79,7 @@ class DecoderLayer(nn.Module):
         
         # 3. Feed-Forward Network
         save = out
-        out = self.ff1(out)
-        out = self.relu(out)
-        out = self.ff2(out)
+        out = self.ff(out)
         out = out + save  # Residual connection
         out = self.layer_norm3(out)
         
@@ -114,14 +110,14 @@ class GPTDecoderLayer(nn.Module):
         
         self.multi_head_attention = MultiHeadAttention(d_model=d_model, 
                                                        num_heads=num_heads, dropout=dropout)
-        self.layer_norm1 = RMSNorm(d_model=d_model)
-        self.layer_norm2 = RMSNorm(d_model=d_model)
+        self.norm1 = RMSNorm(d_model=d_model)
+        self.norm2 = RMSNorm(d_model=d_model)
         self.ff = GPTFeedForward(d_model=d_model, d_ff=d_ff, dropout=dropout)
         
         # Residual scaling factor: 1/sqrt(num_layers) to stabilize deep models
         self.factor = 1 / (num_layers ** 0.5)
     
-    def forward(self, x, mask=None, layer_cache=None):
+    def forward(self, x, mask=None, layer_cache=None, use_cache=True):
         """
         Process input through the GPT decoder layer.
         
@@ -135,18 +131,24 @@ class GPTDecoderLayer(nn.Module):
             present (tuple): Current (key, value) for caching
         """
         # Pre-LayerNorm Self-Attention
-        norm_x = self.layer_norm1(x)
+        norm_x = self.norm1(x)
         
-        attn_out, present = self.multi_head_attention(
-            norm_x, norm_x, norm_x, 
-            mask=mask,
-            layer_cache=layer_cache)
+        if not use_cache:
+            attn_out, present = self.multi_head_attention(
+                norm_x, norm_x, norm_x, 
+                mask=mask,
+                layer_cache=None)
+        else:
+            attn_out, present = self.multi_head_attention(
+                norm_x, norm_x, norm_x, 
+                mask=mask,
+                layer_cache=layer_cache)
         
         # Scaled residual connection
         out = x + attn_out * self.factor
         
         # Pre-LayerNorm Feed-Forward
-        norm_out = self.layer_norm2(out)
+        norm_out = self.norm2(out)
         ff_out = self.ff(norm_out)
         
         # Scaled residual connection

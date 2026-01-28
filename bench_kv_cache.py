@@ -85,7 +85,7 @@ prompt = "To be, or not to be, that is the question:\n"
 
 # Token counts to benchmark
 # Note: Model max context is 512 tokens. Tests exceeding this will be capped.
-max_new_tokens = [100, 200, 300, 500] # Last test is above max context because of prompt length
+max_new_tokens = [100, 200, 300, 500] # Last test is above max context because of prompt length (prompt + new tokens)
 
 # Run benchmark
 benchmark_both_methods(model, tokenizer, prompt, max_new_tokens)

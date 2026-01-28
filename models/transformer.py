@@ -110,7 +110,7 @@ class Transformer(nn.Module):
         # Start with <BOS> token
         ys = torch.ones(batch_size, 1).fill_(start_symbol).type_as(src.data)
         
-        # Generate tokens autoregressively
+        # Generate tokens autoregressively until max_len
         for _ in range(max_len - 1):
             out = self.decode(ys, encoder_out)
             prob = self.output_layer(out[:, -1])
